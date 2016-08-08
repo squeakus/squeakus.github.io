@@ -1,1 +1,241 @@
-Hello World
+<!DOCTYPE html>
+<html>
+	<head>
+		<link rel="stylesheet" href="styles.css">
+	</head>
+
+	<body>
+
+		<ul class="h_ul">
+			<li class="h_li"><a class="h_li_a">Model</a></li>
+			<!--li class="h_li"><a class="h_li_a" onclick="switchModel('man64')">man64</a></li>
+			<li class="h_li"><a class="h_li_a" onclick="switchModel('man128')">man128</a></li>
+			<li class="h_li"><a class="h_li_a" onclick="switchModel('man256')">man256</a></li>
+			<li class="h_li"><a class="h_li_a" onclick="switchModel('cchurch256')">cchurch256</a></li-->
+			<li class="h_li"><a class="h_li_a" onclick="loadOBJ('obj/dublin.obj')">Dublin</a></li>
+			<li class="h_li"><a class="h_li_a" onclick="loadOBJ('obj/liffey.obj')">Liffey Scan</a></li>
+
+			<li class="h_li"><a class="h_li_a" onclick="loadOBJ('obj/cchurch.obj')">Christchurch Scan</a></li>
+
+			<li class="h_li"><a class="h_li_a" onclick="clearPreviousModel()">Clear</a></li>
+			<li class="h_li"><a class="h_li_a" onclick="orbitControls()">Orbit</a></li>
+			<li class="h_li"><a class="h_li_a" onclick="flightControls()">Fly</a></li>
+
+		</ul>
+
+		<ul id="levelOfDetailButtons" class="h_ul">
+		</ul>
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r79/three.min.js"></script>
+		<script src="OBJLoader.js"></script>
+		<script src="PLYLoader.js"></script>
+		<script src="FlyControls.js"></script>
+		<script src="OrbitControls.js"></script>
+
+		<script>
+			var container;
+			var camera, scene, renderer;
+			var clock = new THREE.Clock();
+			var mouseX = 0, mouseY = 0;
+			var windowHalfX = window.innerWidth / 2;
+			var windowHalfY = window.innerHeight / 2;
+			init();
+			animate();
+			var objLoader;
+			var plyLoader;
+			var manager;
+			var LODs;
+
+			var model;
+
+			function clearPreviousModel() {
+				scene.remove(model);
+			}
+
+			// just grabbed this quickly from https://soledadpenades.com/articles/three-js-tutorials/drawing-the-coordinate-axes/
+			// works well for debugging
+			function buildAxis( src, dst, colorHex, dashed ) {
+				var geom = new THREE.Geometry(),
+				    mat;
+
+				if(dashed) {
+					mat = new THREE.LineDashedMaterial({ linewidth: 3, color: colorHex, dashSize: 3, gapSize: 3 });
+				} else {
+					mat = new THREE.LineBasicMaterial({ linewidth: 3, color: colorHex });
+				}
+
+				geom.vertices.push( src.clone() );
+				geom.vertices.push( dst.clone() );
+				geom.computeLineDistances(); // This one is SUPER important, otherwise dashed lines will appear as simple plain lines
+
+				var axis = new THREE.Line( geom, mat, THREE.LinePieces );
+
+				return axis;
+
+			}
+
+			function buildAxes( length ) {
+				var axes = new THREE.Object3D();
+
+				axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( length, 0, 0 ), 0xFF0000, false ) ); // +X
+				axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( -length, 0, 0 ), 0xFF0000, true) ); // -X
+				axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, length, 0 ), 0x00FF00, false ) ); // +Y
+				axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, -length, 0 ), 0x00FF00, true ) ); // -Y
+				axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, 0, length ), 0x0000FF, false ) ); // +Z
+				axes.add( buildAxis( new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, 0, -length ), 0x0000FF, true ) ); // -Z
+
+				return axes;
+
+			}
+
+			// Load a .obj file by name (give full path)
+			// comment it out as we should use PLY from now on
+			function loadOBJ(name) {
+				clearPreviousModel();
+				objLoader.load(name, function(object) {
+					object.traverse(function(child) {
+						if (child instanceof THREE.Mesh) {
+							child.material.side = THREE.DoubleSide;
+						}
+					});
+					object.position.x = -120;
+					object.position.y = -10;
+					object.position.z = -100;
+
+					scene.add(object);
+					model = object;
+				}, onProgress, onError);
+			}
+
+			function switchLOD(modelName, i) {
+				clearPreviousModel();
+				loadPLY('ply/' + modelName + '/' + i + '.ply');
+			}
+
+			function generateLevelOfDetailButtons(modelName, n) {
+				document.getElementById('levelOfDetailButtons').innerHTML = '<li class="h_li"><a class="h_li_a">Level of detail:</a></li>';
+
+				for (var i = 0; i < n; i++) {
+					document.getElementById('levelOfDetailButtons').innerHTML += '<li class="h_li"><a onclick="switchLOD(' + "'" + modelName + "'" + ',' + i + ')" class="h_li_a">' + i + '</a></li>';
+				}
+				document.getElementById('levelOfDetailButtons').innerHTML += '<li class="h_li"><a class="h_li_a" onclick=switchModel(' + "'" + modelName + "'" + ')>Full</a></li>';
+			}
+
+			function getNumberOfLevelsOfDetail(modelName) {
+				return LODs[modelName];
+			}
+
+			function switchModel(name) {
+				clearPreviousModel();
+				loadPLY('ply/' + name + '/' + name + '.ply');
+				var lods = getNumberOfLevelsOfDetail(name);
+				generateLevelOfDetailButtons(name, lods);
+			}
+
+			function loadPLY(name) {
+				plyLoader.load(name, function ( geometry ) {
+					geometry.computeFaceNormals();
+					var material = new THREE.MeshStandardMaterial( { color: 0x0055ff } );
+					material.side = THREE.DoubleSide;
+					var mesh = new THREE.Mesh( geometry, material );
+					//mesh.position.x = -200;
+					//mesh.position.y = -40;
+					//mesh.position.z = -200;
+
+					mesh.castShadow = true;
+					mesh.receiveShadow = true;
+					model = mesh;
+					scene.add( mesh );
+				} );
+			}
+
+			function onProgress() {}
+			function onError() {}
+
+			function init() {
+				clock.start()
+				container = document.createElement( 'div' );
+				document.body.appendChild( container );
+				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 2000 );
+				camera.position.z = 500;
+				// scene
+				scene = new THREE.Scene();
+
+				LODs = {};
+				LODs["man64"] = 3;
+				LODs["man128"] = 4;
+				LODs["man256"] = 5;
+				LODs["cchurch256"] = 5;
+
+				// lights
+				var ambient = new THREE.AmbientLight( 0x101030 );
+				scene.add(ambient);
+
+				var directionalLight = new THREE.DirectionalLight( 0xffeedd );
+				directionalLight.position.set( 0, 0, 1 );
+				scene.add( directionalLight );
+
+
+				var pointlight = new THREE.PointLight(0xAAAAAA);
+				pointlight.position.set(250, 250, 250);
+				scene.add(pointlight);
+
+				manager = new THREE.LoadingManager();
+				manager.onProgress = function (item, loaded, total) {
+					console.log(item, loaded, total);
+				};
+
+				scene.add(buildAxes(100));
+
+				// model
+				objLoader = new THREE.OBJLoader(manager);
+				plyLoader = new THREE.PLYLoader(manager);
+
+				//switchModel('man64');
+				loadOBJ('obj/dublin.obj');
+
+				renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				container.appendChild( renderer.domElement );
+
+				orbitControls();
+				window.addEventListener('resize', onWindowResize, false);
+			}
+
+			function flightControls(){
+				console.log("using flight controller");
+				controls = new THREE.FlyControls( camera, renderer.domElement);
+				controls.movementSpeed = 100;
+				controls.domElement = container;
+				controls.rollSpeed = Math.PI / 24;
+				controls.autoForward = false;
+				controls.dragToLook = false;
+			}
+
+			function orbitControls(){
+				controls = new THREE.OrbitControls(camera, renderer.domElement);
+			}
+
+			function onWindowResize() {
+				windowHalfX = window.innerWidth / 2;
+				windowHalfY = window.innerHeight / 2;
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+
+
+			function animate() {
+				requestAnimationFrame( animate );
+				render();
+			}
+
+			function render() {
+				var delta = clock.getDelta();
+				renderer.render( scene, camera );
+				controls.update(delta);
+			}
+		</script>
+	</body>
+</html
