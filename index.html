@@ -205,6 +205,9 @@
 
 			function flightControls(){
 				console.log("using flight controller");
+				if (typeof controls !== 'undefined'){
+					controls.dispose();
+				}
 				controls = new THREE.FlyControls( camera, renderer.domElement);
 				controls.movementSpeed = 100;
 				controls.domElement = container;
@@ -214,6 +217,10 @@
 			}
 
 			function orbitControls(){
+				if (typeof variable !== 'undefined') {
+					controls.dispose();
+				}
+				
 				controls = new THREE.OrbitControls(camera, renderer.domElement);
 			}
 
