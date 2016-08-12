@@ -24,8 +24,9 @@
 			var mergedGeo;
 			var geometry, group;
 			var mouseX = 0, mouseY = 0;
-			var doMerge = true;
+
 			var doMerge = getUrlVars()["doMerge"];
+			doMerge	= doMerge !== undefined	? doMerge	: true;
 			var windowHalfX = window.innerWidth / 2;
 			var windowHalfY = window.innerHeight / 2;
 
