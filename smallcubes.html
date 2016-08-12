@@ -25,8 +25,16 @@
 			var geometry, group;
 			var mouseX = 0, mouseY = 0;
 
-			var doMerge = getUrlVars()["doMerge"];
-			doMerge	= doMerge !== undefined	? doMerge	: true;
+			// convert the input string to a boolean
+			var mergeString = getUrlVars()["doMerge"];
+			if (mergeString == "false"){
+				doMerge = false;
+			}
+			else{
+				doMerge = true;
+			}
+
+
 			var windowHalfX = window.innerWidth / 2;
 			var windowHalfY = window.innerHeight / 2;
 
